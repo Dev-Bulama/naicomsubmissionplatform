@@ -21,13 +21,14 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-Log.Logger = SerilogConfigurator.Configure(builder.Configuration, "NLIP.API").CreateLogger();
+var isTesting = builder.Environment.IsEnvironment("Testing");
+
+Log.Logger = SerilogConfigurator.Configure(builder.Configuration, "NLIP.API", enableDatabaseSink: !isTesting).CreateLogger();
 builder.Host.UseSerilog();
 
 // ---- Layers ----
-var isTesting = builder.Environment.IsEnvironment("Testing");
 builder.Services.AddApplication();
-builder.Services.AddPersistence(builder.Configuration);
+builder.Services.AddPersistence(builder.Configuration, registerDbContext: !isTesting);
 builder.Services.AddInfrastructure(builder.Configuration, useHangfire: !isTesting);
 builder.Services.AddIntegration(builder.Configuration);
 

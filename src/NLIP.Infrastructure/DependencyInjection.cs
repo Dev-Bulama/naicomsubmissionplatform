@@ -1,4 +1,5 @@
 using Hangfire;
+using Hangfire.PostgreSql;
 using Hangfire.SqlServer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -9,6 +10,7 @@ using NLIP.Infrastructure.Jobs;
 using NLIP.Infrastructure.Notifications;
 using NLIP.Infrastructure.Security;
 using NLIP.Infrastructure.Services;
+using NLIP.Shared.Configuration;
 
 namespace NLIP.Infrastructure;
 
@@ -80,22 +82,42 @@ public static class DependencyInjection
     /// Registers Hangfire storage + client (IBackgroundJobClient/IRecurringJobManager) so any
     /// host can enqueue jobs. Only NLIP.Worker additionally calls AddHangfireServer() to actually
     /// execute them — the API/Web hosts stay enqueue-only so a slow NAICOM call never ties up a
-    /// web request thread.
+    /// web request thread. Storage engine follows the same Database:Provider setting as
+    /// NLIP.Persistence (see DatabaseOptions) — SQL Server by default, Postgres for the Render
+    /// deployment path (docker-compose/render.yaml set Database:Provider accordingly).
     /// </summary>
     private static void AddHangfireClient(IServiceCollection services, IConfiguration configuration)
     {
-        services.AddHangfire(config => config
-            .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-            .UseSimpleAssemblyNameTypeSerializer()
-            .UseRecommendedSerializerSettings()
-            .UseSqlServerStorage(configuration.GetConnectionString("DefaultConnection"), new SqlServerStorageOptions
+        var provider = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>()?.Provider ?? DatabaseProvider.SqlServer;
+        var connectionString = configuration.GetConnectionString("DefaultConnection") ?? string.Empty;
+
+        services.AddHangfire(config =>
+        {
+            config
+                .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+                .UseSimpleAssemblyNameTypeSerializer()
+                .UseRecommendedSerializerSettings();
+
+            if (provider == DatabaseProvider.Postgres)
             {
-                CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
-                SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
-                QueuePollInterval = TimeSpan.Zero,
-                UseRecommendedIsolationLevel = true,
-                DisableGlobalLocks = true
-            }));
+                config.UsePostgreSqlStorage(NLIP.Shared.Configuration.ConnectionStringNormalizer.NormalizePostgresUri(connectionString), new PostgreSqlStorageOptions
+                {
+                    QueuePollInterval = TimeSpan.Zero,
+                    SchemaName = "hangfire"
+                });
+            }
+            else
+            {
+                config.UseSqlServerStorage(connectionString, new SqlServerStorageOptions
+                {
+                    CommandBatchMaxTimeout = TimeSpan.FromMinutes(5),
+                    SlidingInvisibilityTimeout = TimeSpan.FromMinutes(5),
+                    QueuePollInterval = TimeSpan.Zero,
+                    UseRecommendedIsolationLevel = true,
+                    DisableGlobalLocks = true
+                });
+            }
+        });
 
         services.AddScoped<IBackgroundJobScheduler, HangfireBackgroundJobScheduler>();
     }

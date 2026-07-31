@@ -53,6 +53,20 @@ public class NlipDbContext : DbContext, IApplicationDbContext
         }
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(NlipDbContext).Assembly);
+
+        // SQL Server's ROWVERSION/TIMESTAMP concurrency token has no Postgres equivalent (Npgsql's
+        // migration differ throws on a byte[] IsRowVersion() column) — enable it only when SQL
+        // Server is the active provider; Postgres deployments keep the RowVersion column but
+        // without EF-enforced optimistic concurrency on it (see docs/ROADMAP.md).
+        if (Database.IsSqlServer())
+        {
+            modelBuilder.Entity<Policy>().Property(p => p.RowVersion).IsRowVersion();
+        }
+        else
+        {
+            modelBuilder.Entity<Policy>().Ignore(p => p.RowVersion);
+        }
+
         base.OnModelCreating(modelBuilder);
     }
 

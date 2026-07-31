@@ -1,10 +1,11 @@
+@using NLIP.Web.Components.Layout
 @inject NavigationManager Nav
 
 @if (_forbidden)
 {
-    <Layout.MainLayout>
+    <MainLayout>
         <div class="alert alert-warning m-4">You do not have permission to view this page.</div>
-    </Layout.MainLayout>
+    </MainLayout>
 }
 
 @code {

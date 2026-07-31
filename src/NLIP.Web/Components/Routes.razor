@@ -1,6 +1,8 @@
+@using NLIP.Web.Components.Layout
+
 <Router AppAssembly="@typeof(Program).Assembly">
     <Found Context="routeData">
-        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(Layout.MainLayout)">
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
             <NotAuthorized>
                 <RedirectToLogin />
             </NotAuthorized>
@@ -8,8 +10,8 @@
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
     <NotFound>
-        <Layout.MainLayout>
+        <MainLayout>
             <div class="alert alert-warning m-4">Page not found.</div>
-        </Layout.MainLayout>
+        </MainLayout>
     </NotFound>
 </Router>

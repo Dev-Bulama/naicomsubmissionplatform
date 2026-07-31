@@ -22,7 +22,10 @@ public class PolicyConfiguration : IEntityTypeConfiguration<Policy>
         builder.HasIndex(p => p.Status);
         builder.HasIndex(p => p.BusinessType);
 
-        builder.Property(p => p.RowVersion).IsRowVersion();
+        // SQL-Server-only: .IsRowVersion() maps to the native ROWVERSION/TIMESTAMP type, which
+        // Postgres has no equivalent for (Npgsql's model differ throws on it). The Postgres
+        // migration set instead configures this column as a plain, non-concurrency-checked bytea
+        // — see NlipDbContext.OnModelCreating, which runs after this and overrides it per provider.
 
         builder.HasOne(p => p.Product).WithMany().HasForeignKey(p => p.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(p => p.Branch).WithMany().HasForeignKey(p => p.BranchId).OnDelete(DeleteBehavior.Restrict);

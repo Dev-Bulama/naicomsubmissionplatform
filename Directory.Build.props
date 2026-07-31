@@ -1,0 +1,14 @@
+<Project>
+
+  <PropertyGroup>
+    <!--
+      This repo targets net9.0 throughout, but the .NET 9 runtime may not be installed on a given
+      build/CI machine (only a newer major, e.g. .NET 10, might be) — RollForward=LatestMajor lets
+      the produced apps/tests launch against whatever later runtime is actually present instead of
+      failing with "You must install or update .NET to run this application." Harmless once a
+      matching net9.0 runtime is installed; it simply won't need to roll forward then.
+    -->
+    <RollForward>LatestMajor</RollForward>
+  </PropertyGroup>
+
+</Project>

@@ -1,7 +1,7 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using NLIP.Application.Features.Auth.Commands.Login;
-using NLIP.Application.Features.Auth.Commands.RefreshToken;
+using NLIP.Application.Features.Auth.Commands.RefreshUserToken;
 
 namespace NLIP.API.Controllers;
 

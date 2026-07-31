@@ -18,11 +18,42 @@ openssl rand -base64 48   # JWT_SIGNING_KEY
 openssl rand -base64 32   # ENCRYPTION_KEY_BASE64
 ```
 
-**Before the API can serve traffic**, an EF Core migration must exist (see
-`docs/ROADMAP.md#generate-the-initial-ef-core-migration`) — this scaffold's `Database.MigrateAsync()`
-call is a no-op with zero migration files present.
+This path uses SQL Server (`Database:Provider=SqlServer`, the default) and both EF Core
+migrations under `src/NLIP.Persistence/Migrations/SqlServer` apply automatically via
+`Database.MigrateAsync()` in `NLIP.API/Program.cs` on first boot.
 
-## 2. IIS deployment (Windows Server)
+## 2. Render (one-click Blueprint, Postgres)
+
+Render has no managed SQL Server, only managed Postgres and a Redis-compatible Key Value store —
+see `docs/ROADMAP.md` for why a second, Postgres-flavored migration set exists alongside the SQL
+Server one, switched via `Database:Provider`.
+
+```bash
+git push                      # push this repo to GitHub/GitLab
+# In the Render dashboard: New + -> Blueprint -> select this repo
+```
+
+`render.yaml` at the repo root provisions, in one pass:
+
+- `nlip-postgres` — managed Postgres database
+- `nlip-redis` — managed Key Value (Redis-compatible) store
+- `nlip-api`, `nlip-worker`, `nlip-web` — one Docker-runtime service each, built from
+  `deploy/docker/Dockerfile.{api,worker,web}`
+- A shared `Jwt__SigningKey` / `Encryption__Key` env var group so `nlip-api` and `nlip-worker`
+  agree on the same encryption key (required — `nlip-worker` must decrypt secrets `nlip-api`
+  encrypted, e.g. `Naicom:Secret`)
+
+After the Blueprint deploys, set `Naicom__Sid` and `Naicom__Secret` manually on both `nlip-api`
+and `nlip-worker` in the Render dashboard (marked `sync: false` in `render.yaml` on purpose — real
+credentials never belong in a file committed to source control).
+
+**`render.yaml` was authored without live access to Render's current docs** (this environment's
+network policy blocks `render.com`) — verify the `fromService` property names and Docker
+port-routing behavior against Render's current Blueprint spec before the first deploy. The env var
+*wiring logic* itself (which settings each service needs, and why) is not a guess — it follows
+directly from `NLIP.Persistence`/`NLIP.Infrastructure`'s `DependencyInjection.cs`.
+
+## 3. IIS deployment (Windows Server)
 
 1. Install the .NET 9 Hosting Bundle on the IIS server.
 2. Publish each web-facing project as a self-contained or framework-dependent deployment:
@@ -46,7 +77,7 @@ call is a no-op with zero migration files present.
 6. Point IIS's site bindings at your TLS certificate; do not terminate TLS anywhere except at IIS
    or an upstream load balancer you control.
 
-## 3. Azure deployment
+## 4. Azure deployment
 
 - **App Service** (Linux, .NET 9) for `NLIP.API` and `NLIP.Web` — one App Service per project, or
   one Service Plan hosting both as separate Web Apps.
@@ -63,7 +94,7 @@ call is a no-op with zero migration files present.
   add `Serilog.Sinks.ApplicationInsights` alongside the existing sinks in
   `NLIP.Infrastructure.Logging.SerilogConfigurator`.
 
-## 4. CI/CD
+## 5. CI/CD
 
 `.github/workflows/ci.yml` builds the solution and runs both test projects on every push/PR. Wire
 a deploy job onto it once you have a target environment: for Azure, `azure/webapps-deploy@v3`
@@ -71,7 +102,7 @@ after `dotnet publish`; for on-prem, an IIS/PowerShell remoting step or a self-h
 `dotnet publish` + `robocopy`/`web deploy`. Azure DevOps: the same three commands
 (`restore` / `build` / `test`) map directly onto a `dotnet` task-based YAML pipeline.
 
-## 5. Database migrations in production
+## 6. Database migrations in production
 
 Prefer generating a SQL script and reviewing it rather than letting `Database.MigrateAsync()` run
 untested DDL against production:

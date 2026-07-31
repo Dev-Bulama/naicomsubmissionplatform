@@ -1,0 +1,137 @@
+# Render Blueprint for NLIP.
+#
+# IMPORTANT: this file was authored without live access to Render's docs (this environment's
+# network policy blocks render.com), based on the author's best knowledge of the Blueprint spec
+# as of early 2026. Before relying on it, validate field names — especially the `fromService`
+# property names used to wire nlip-web -> nlip-api, and the Docker port-routing behavior — against
+# the current spec at https://render.com/docs/blueprint-spec. Everything else (env var wiring,
+# the Database:Provider=Postgres switch, envVarGroups for shared secrets) follows directly from
+# how NLIP.Persistence/NLIP.Infrastructure are actually built (see DependencyInjection.cs in both)
+# and is not a guess.
+#
+# Deploy: push this repo to GitHub/GitLab, then in the Render dashboard choose
+# "New +" -> "Blueprint" and point it at the repo. Render provisions everything below in one pass.
+#
+# Why Postgres here instead of SQL Server: Render has no managed SQL Server offering, only
+# managed Postgres and a Redis-compatible Key Value store — see docs/DEPLOYMENT.md and
+# docs/ROADMAP.md for the full rationale and the dual-provider design that makes this possible
+# without disturbing the SQL-Server-based Docker Compose / on-prem deployment path.
+
+databases:
+  - name: nlip-postgres
+    databaseName: nlip
+    user: nlip
+    plan: starter
+    region: oregon
+    postgresMajorVersion: "16"
+
+envVarGroups:
+  - name: nlip-shared-secrets
+    envVars:
+      # Shared across nlip-api and nlip-worker so a secret SystemSettings value (e.g.
+      # Naicom:Secret) encrypted by one process can be decrypted by the other — see
+      # SettingEncryptionService. Render generates one value per group, reused by every service
+      # that references this group (not one value per service).
+      - key: Encryption__Key
+        generateValue: true
+      - key: Jwt__SigningKey
+        generateValue: true
+
+services:
+  # ---- Managed Redis-compatible Key Value store ----
+  - type: redis
+    name: nlip-redis
+    plan: starter
+    region: oregon
+    ipAllowList: [] # empty = reachable only from other services in this Render account/region
+
+  # ---- API (ASP.NET Core Web API: JWT auth, Swagger, SignalR, Hangfire dashboard) ----
+  - type: web
+    name: nlip-api
+    runtime: docker
+    dockerfilePath: ./deploy/docker/Dockerfile.api
+    dockerContext: .
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: nlip-shared-secrets
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      - key: Database__Provider
+        value: Postgres
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: nlip-postgres
+          property: connectionString
+      - key: ConnectionStrings__Redis
+        fromService:
+          type: redis
+          name: nlip-redis
+          property: connectionString
+      - key: Jwt__Issuer
+        value: NLIP
+      - key: Jwt__Audience
+        value: NLIP.Clients
+      - key: Naicom__BaseUrl
+        value: https://portal.naicom.gov.ng/
+      - key: Naicom__Sid
+        sync: false # set manually in the Render dashboard once NAICOM issues credentials
+      - key: Naicom__Secret
+        sync: false
+      - key: Cors__AllowedOrigins__0
+        fromService:
+          type: web
+          name: nlip-web
+          property: host
+
+  # ---- Worker (Hangfire server: outbox processor, retry engine, health/token jobs) ----
+  - type: worker
+    name: nlip-worker
+    runtime: docker
+    dockerfilePath: ./deploy/docker/Dockerfile.worker
+    dockerContext: .
+    plan: starter
+    region: oregon
+    envVars:
+      - fromGroup: nlip-shared-secrets
+      - key: DOTNET_ENVIRONMENT
+        value: Production
+      - key: Database__Provider
+        value: Postgres
+      - key: ConnectionStrings__DefaultConnection
+        fromDatabase:
+          name: nlip-postgres
+          property: connectionString
+      - key: ConnectionStrings__Redis
+        fromService:
+          type: redis
+          name: nlip-redis
+          property: connectionString
+      - key: Naicom__BaseUrl
+        value: https://portal.naicom.gov.ng/
+      - key: Naicom__Sid
+        sync: false
+      - key: Naicom__Secret
+        sync: false
+
+  # ---- Web (Blazor Server dashboard — a pure HTTP/SignalR client of nlip-api, no DB access) ----
+  - type: web
+    name: nlip-web
+    runtime: docker
+    dockerfilePath: ./deploy/docker/Dockerfile.web
+    dockerContext: .
+    plan: starter
+    region: oregon
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8081
+      - key: Api__BaseUrl
+        fromService:
+          type: web
+          name: nlip-api
+          property: host

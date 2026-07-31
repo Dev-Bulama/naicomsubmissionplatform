@@ -78,7 +78,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResultDto>
         var (accessToken, expiresAt) = _tokenGenerator.GenerateAccessToken(user, roles, permissions);
         var refreshTokenValue = _tokenGenerator.GenerateRefreshToken();
 
-        _context.RefreshTokens.Add(new RefreshToken
+        _context.RefreshTokens.Add(new NLIP.Domain.Entities.Identity.RefreshToken
         {
             UserId = user.Id,
             Token = refreshTokenValue,

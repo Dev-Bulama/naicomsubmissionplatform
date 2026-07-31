@@ -7,10 +7,12 @@ mapped, submitted to NAICOM, retried on failure, and fully audited — with no o
 class in scope.
 
 > **Read this first:** [`docs/ROADMAP.md`](docs/ROADMAP.md) lists exactly what in this codebase is
-> production-real vs. a scaffold/stub, and the concrete steps left before go-live (most
-> importantly: generating the first EF Core migration, and verifying the NAICOM DTOs against the
-> live API spec — this environment could not reach `portal.naicom.gov.ng` to confirm field-level
-> accuracy). Read it before assuming any given piece is finished.
+> production-real vs. a scaffold/stub. The solution builds cleanly and all 20 tests pass under a
+> real .NET SDK (see the roadmap for what that pass found and fixed) and ships EF Core migrations
+> for both supported database providers. The one still-unverified piece: the NAICOM DTOs are a
+> best-effort design, not a transcription of the live spec — this environment could not reach
+> `portal.naicom.gov.ng` to confirm field-level accuracy. Read the roadmap before assuming any
+> given piece is finished.
 
 ## Solution layout
 
@@ -30,8 +32,9 @@ class in scope.
   NLIP.IntegrationTests    WebApplicationFactory + Sqlite in-memory API tests
 /deploy
   docker/              Dockerfiles for API/Web/Worker
-  sql/                 Hand-authored reference schema (see docs/ROADMAP.md)
+  sql/                 schema.sql / schema.postgres.sql — generated from the real EF Core migrations
 /docs                  Architecture, deployment, security, configuration, ops, roadmap, manuals
+render.yaml            Render Blueprint (Postgres deployment path — see docs/DEPLOYMENT.md)
 ```
 
 ## Architecture
@@ -47,7 +50,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full diagram set (com
 submission sequence diagram, ER diagram) and the design-pattern rationale (Outbox, Repository +
 Unit of Work, CQRS, resilience pipeline, etc).
 
-## Quick start (Docker)
+## Quick start (Docker, SQL Server)
 
 ```bash
 cp .env.example .env   # fill in DB_PASSWORD, JWT_SIGNING_KEY, ENCRYPTION_KEY_BASE64
@@ -59,21 +62,34 @@ docker compose up --build
 - Hangfire dashboard: http://localhost:8080/hangfire (SuperAdministrator/SystemAdministrator/IntegrationAdministrator only)
 - Default seeded login: `admin` / `ChangeMe!2026` (forced password change on first login — see `MustChangePassword`)
 
-Before this actually creates tables, generate the EF Core migration (see ROADMAP) — this scaffold
-does not ship one because the sandbox that built it had no .NET SDK available.
+The EF Core migration under `src/NLIP.Persistence/Migrations/SqlServer` applies automatically on
+first boot via `Database.MigrateAsync()`.
+
+## Quick start (Render, Postgres)
+
+Push this repo to GitHub/GitLab, then in the Render dashboard: **New +** -> **Blueprint** -> select
+the repo. `render.yaml` provisions managed Postgres, managed Redis, and all three app services in
+one pass. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#2-render-one-click-blueprint-postgres) for
+the post-deploy steps (setting NAICOM credentials) and a caveat about verifying the Blueprint
+schema against Render's current docs.
 
 ## Local development (without Docker)
 
-Requires the .NET 9 SDK, a reachable SQL Server, and Redis (optional — falls back to in-memory
-distributed cache if `ConnectionStrings:Redis` is empty).
+Requires the .NET 9 SDK (or a later major with `RollForward` — see `global.json` /
+`Directory.Build.props`) and a reachable SQL Server or Postgres instance, plus Redis (optional —
+falls back to in-memory distributed cache if `ConnectionStrings:Redis` is empty).
 
 ```bash
 dotnet restore
-dotnet ef migrations add InitialCreate -p src/NLIP.Persistence -s src/NLIP.API
+dotnet ef database update -p src/NLIP.Persistence -s src/NLIP.API   # applies Migrations/SqlServer
 dotnet run --project src/NLIP.API
 dotnet run --project src/NLIP.Worker
 dotnet run --project src/NLIP.Web
 ```
+
+To run against Postgres locally instead, set `Database:Provider=Postgres` and point
+`ConnectionStrings:DefaultConnection` at it — `Migrations/Postgres` applies instead (see
+`ProviderFilteredMigrationsAssembly`).
 
 ## Scope
 

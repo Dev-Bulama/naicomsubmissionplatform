@@ -4,7 +4,7 @@ using NLIP.Application.Common.Interfaces;
 using NLIP.Application.Features.Auth.Dtos;
 using NLIP.Domain.Entities.Identity;
 
-namespace NLIP.Application.Features.Auth.Commands.RefreshToken;
+namespace NLIP.Application.Features.Auth.Commands.RefreshUserToken;
 
 public record RefreshTokenCommand(string RefreshToken, string? IpAddress) : IRequest<AuthResultDto>;
 
@@ -49,7 +49,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
         existing.RevokedAt = _dateTime.UtcNow;
         existing.ReplacedByToken = newRefreshToken;
 
-        _context.RefreshTokens.Add(new RefreshToken
+        _context.RefreshTokens.Add(new NLIP.Domain.Entities.Identity.RefreshToken
         {
             UserId = existing.UserId,
             Token = newRefreshToken,

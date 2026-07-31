@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Contrib.WaitAndRetry;
+using Polly.Extensions.Http;
 using Polly.Timeout;
 
 namespace NLIP.Integration.Resilience;

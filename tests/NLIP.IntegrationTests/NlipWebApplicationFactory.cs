@@ -3,17 +3,20 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using NLIP.Persistence;
 
 namespace NLIP.IntegrationTests;
 
 /// <summary>
-/// Boots the real NLIP.API host under the "Testing" environment (see Program.cs — this skips
-/// the SQL Server migrate/seed step) and swaps NlipDbContext onto an in-memory Sqlite connection
-/// built straight from the EF model via EnsureCreated(), since no EF migration files exist yet
-/// in this scaffold (see docs/ROADMAP.md). Keeps the connection open for the factory's lifetime
-/// so the in-memory database isn't dropped between requests within a test.
+/// Boots the real NLIP.API host under the "Testing" environment (see Program.cs — this skips the
+/// SQL Server migrate/seed step and, critically, skips registering NlipDbContext against
+/// SqlServer at all: AddPersistence(..., registerDbContext: false)). This factory then registers
+/// NlipDbContext itself against an in-memory Sqlite connection, built straight from the EF model
+/// via EnsureCreated() since no EF migration files exist yet in this scaffold (see
+/// docs/ROADMAP.md). Registering Sqlite on top of an already-registered SqlServer DbContext
+/// (e.g. via RemoveAll + re-Add) does NOT work — EF Core ends up with both providers' services
+/// present in the container and throws "Only a single database provider can be registered";
+/// skipping the SqlServer registration in the first place avoids that.
 /// </summary>
 public class NlipWebApplicationFactory : WebApplicationFactory<Program>
 {
@@ -25,8 +28,6 @@ public class NlipWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            services.RemoveAll<DbContextOptions<NlipDbContext>>();
-
             _connection.Open();
             services.AddDbContext<NlipDbContext>(options => options.UseSqlite(_connection));
 

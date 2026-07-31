@@ -1,27 +1,83 @@
 # Roadmap — what's real, what's stubbed, what's next
 
-This scaffold was built in one session inside a sandboxed environment with **no .NET SDK** (so
-nothing here has been compiled or run) and **no network access to `portal.naicom.gov.ng`** (so the
-NAICOM DTOs are a best-effort design, not a transcription of the real spec). Both constraints are
-recorded here so nobody mistakes this for a verified, tested build. Read this before demoing or
-deploying anything.
+This started as a one-session scaffold built with no .NET SDK and no network access to
+`portal.naicom.gov.ng`. A later session installed the .NET 10 SDK (rolling forward to build the
+net9.0-targeted projects — see `global.json`/`Directory.Build.props`), which made it possible to
+actually **compile, test, and generate real EF Core migrations** rather than write them by hand
+blind. That pass found and fixed several real bugs (see "Verified by compiling" below) that no
+amount of careful reading would have caught. `portal.naicom.gov.ng` is still unreachable from this
+environment, so the NAICOM DTOs remain a best-effort design pending verification — that is the one
+genuinely unverified piece left.
 
 ## Must-do before this can run at all
 
-1. **Generate the initial EF Core migration.** No `Migrations/` folder exists.
-   ```bash
-   dotnet tool install --global dotnet-ef
-   dotnet ef migrations add InitialCreate -p src/NLIP.Persistence -s src/NLIP.API
-   ```
-   Then diff its `Up()` against `deploy/sql/schema.sql` and reconcile any drift before trusting
-   either one.
-2. **Verify every NAICOM DTO field/endpoint against the real spec.** See
+1. **Verify every NAICOM DTO field/endpoint against the real spec.** See
    `src/NLIP.Integration/Dtos/README_VERIFY_AGAINST_SPEC.md` for exactly what to check and where.
    Nothing else in the codebase needs to change once the DTOs and `NaicomApiEndpoints` constants
    are corrected — that isolation was the point of the mapping-layer design.
-3. **Build once with a real SDK** (`dotnet build NLIP.sln`) and fix whatever the compiler finds.
-   Care was taken to get namespaces, package versions, and signatures right by hand, but "written
-   carefully" is not the same guarantee as "compiled."
+2. **Point it at a real database and confirm the migration applies.** Both migrations exist and
+   are tool-verified against the model (see below), but neither has been run against a live SQL
+   Server or Postgres instance in this sandbox (no DB engine was reachable here). `dotnet ef
+   database update` (or letting `NLIP.API`'s `Database.MigrateAsync()` run at startup) should just
+   work; if it doesn't, that's the next thing to debug.
+
+## Verified by compiling (not just written carefully)
+
+Installing a real SDK and building/testing surfaced six real bugs that are now fixed — noted here
+so nobody re-introduces them:
+
+- A `RefreshToken` command namespace shadowing the `RefreshToken` domain entity (CS0118) — the
+  command folder was renamed `Commands/RefreshUserToken`.
+- `<Routes @rendermode="InteractiveServer">` needed `RenderMode.InteractiveServer` — bare
+  `InteractiveServer` doesn't resolve.
+- Two missing NuGet packages (`Polly.Extensions.Http`'s using directive, `Hangfire.NetCore` for
+  `AddHangfire`/`AddHangfireServer`).
+- SQL-Server-only `HasColumnType("nvarchar(max)")` annotations broke Sqlite (used by the
+  integration tests) and would have broken Postgres too — removed in favor of provider-default
+  large-text mapping.
+- The Serilog SQL sink and the "migrate + seed on startup" step ran unconditionally, including
+  under the test host with no real database — both are now skippable (`enableDatabaseSink`,
+  `registerDbContext`/`useHangfire` parameters) without duplicating any host wiring.
+- Config placeholder tokens (`#{JWT_SIGNING_KEY}#` etc.) in `appsettings.json` are not valid
+  values — an unconfigured environment must get a blank string that fails loudly at first use
+  (`SettingEncryptionService`/`JwtTokenGenerator` already did this correctly; the appsettings
+  files didn't). Also removed a silent-random-key fallback for `Encryption:Key` that would have
+  made every previously encrypted setting undecryptable after a restart.
+
+All 20 tests (17 unit + 3 integration) pass; `dotnet build NLIP.sln` is clean (warnings only, no
+errors) under the .NET 10 SDK with `RollForward=LatestMajor`.
+
+## Two database providers, two migration sets
+
+`NLIP.Persistence` supports SQL Server (the original tech-stack requirement, used by
+`docker-compose.yml`/on-prem deployment) and Postgres (for Render, which has no managed SQL
+Server — see `docs/DEPLOYMENT.md`), switched via the `Database:Provider` setting
+(`NLIP.Shared.Configuration.DatabaseOptions`). Both providers' Hangfire storage and EF Core
+provider follow the same switch (`NLIP.Infrastructure`/`NLIP.Persistence` `DependencyInjection.cs`).
+
+Each provider has its own migration set (`Migrations/SqlServer`, `Migrations/Postgres`) in the same
+assembly, filtered at runtime by `ProviderFilteredMigrationsAssembly` so only the active provider's
+migration is ever applied — verified directly (see `git log` / this session's work): resolving
+`IMigrationsAssembly` under `Database:Provider=SqlServer` exposes only the SqlServer migration, and
+under `Postgres` only the Postgres one.
+
+**The Postgres migration was not generated by `dotnet ef migrations add`.** As of EF Core 9.0.1 +
+`Npgsql.EntityFrameworkCore.PostgreSQL` 9.0.4, `MigrationsModelDiffer` throws a
+`NullReferenceException` scaffolding this model against Npgsql — confirmed not a version-skew
+issue (aligning every EF Core package to the same 9.0.1, and trying Npgsql 9.0.2/9.0.4, made no
+difference) and not tied to any specific entity or column type (it reproduces even for a single
+trivial `Permission` entity with no relationships). `dotnet ef dbcontext script` (which builds DDL
+directly from the model instead of diffing against an empty baseline) and
+`IMigrationsCodeGenerator.GenerateSnapshot` (used for the ModelSnapshot/Designer files) both work
+fine against the exact same model — so the Postgres migration set was assembled from their output:
+the real generated `CREATE TABLE` script wrapped in a `Migration.Up()` via `migrationBuilder.Sql(...)`,
+and the real generated model snapshot reused verbatim for both `NlipDbContextModelSnapshot.cs` and
+the migration's `.Designer.cs` (their bodies are identical in a normally-scaffolded migration too —
+confirmed by diffing the SQL Server migration's own two files). If a future EF Core/Npgsql patch
+fixes the differ, re-run `dotnet ef migrations add PostgresInitialCreate --project
+src/NLIP.Persistence --startup-project src/NLIP.API -o Migrations/Postgres -n
+NLIP.Persistence.Migrations.Postgres` with `NLIP_MIGRATION_PROVIDER=Postgres` set (see
+`NlipDbContextDesignTimeFactory`) and replace the hand-assembled files if it now succeeds.
 
 ## Implemented and reasonably complete
 
@@ -35,11 +91,14 @@ deploying anything.
 - JWT auth, permission-based RBAC (7 roles, ~16 permissions, admin-configurable via
   RolePermissions), account lockout, BCrypt hashing, password-complexity validator, AES-256-GCM
   encryption for secret settings
-- Serilog to console/file/SQL Server with correlation IDs; audit logging behavior on every command
+- Serilog to console/file/SQL Server (Postgres deployments: console/file only, see
+  `SerilogConfigurator`) with correlation IDs; audit logging behavior on every command
 - Dashboard, Policy Management (search/detail/retry), Synchronization Monitor, Settings — both API
   and a working Blazor Server UI consuming it
-- Docker Compose for the full stack; unit tests for domain rules/validators/security; integration
-  tests booting the real API host against an in-memory Sqlite database
+- Docker Compose (SQL Server path) and `render.yaml` (Postgres path) for two full-stack deployment
+  options; unit tests for domain rules/validators/security; integration tests booting the real API
+  host against an in-memory Sqlite database
+- Two EF Core migration sets (SQL Server, Postgres), provider-filtered at runtime
 
 ## Stubbed / partial — real interfaces exist, real providers don't
 
@@ -58,19 +117,22 @@ deploying anything.
   and RabbitMQ/Azure Service Bus/Kafka adapters are described in `ARCHITECTURE.md` but not built.
 - **Session idle-timeout enforcement in the Blazor UI** — the setting (`SessionTimeoutMinutes`)
   exists; no client-side idle timer forces a logout yet.
+- **Postgres DB log sink** — Serilog writes console/file only under `Database:Provider=Postgres`;
+  add `Serilog.Sinks.PostgreSQL` if a DB-backed log sink becomes a requirement there.
+- **`render.yaml` schema accuracy** — authored without live access to Render's current docs (see
+  the file's header comment); the env-var wiring logic is correct by construction (it mirrors
+  exactly what `DependencyInjection.cs` reads), but field names like `fromService` properties
+  should be checked against Render's current Blueprint spec before the first deploy.
 
 ## Explicitly out of scope (by design, not oversight)
 
 - Every NAICOM insurance class other than Individual Life and Group Life
 - Kafka connector (brief itself marks this "future")
-- A hand-authored EF Core migration (see "must-do" above — auto-generating this correctly requires
-  the SDK, which this environment didn't have; hand-writing migration `Designer.cs` snapshots
-  would risk subtle, hard-to-detect model-snapshot mismatches)
 
 ## Suggested next three PRs
 
-1. Generate + commit the initial migration; stand up a real SQL Server + run the full stack via
-   Docker Compose; fix whatever `dotnet build`/`dotnet test` surface.
+1. Deploy against a real SQL Server (Docker Compose) and a real Render Postgres instance; confirm
+   both migrations apply cleanly and the seeded admin login works end-to-end on each.
 2. Verify NAICOM DTOs against the live spec; add a contract test (record/replay against a sandbox
    NAICOM environment if one is offered) so DTO drift breaks CI instead of production.
 3. Wire the Audit Trail query endpoint + screen, and the Reports export endpoints — both have

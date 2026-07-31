@@ -32,7 +32,8 @@ in the Web UI.
 
 | Section | Key | Notes |
 |---|---|---|
-| `ConnectionStrings` | `DefaultConnection` | SQL Server. `Redis` — optional; empty falls back to in-memory distributed cache |
+| `Database` | `Provider` | `SqlServer` (default, Docker Compose/on-prem) or `Postgres` (Render — see `docs/DEPLOYMENT.md`). Selects both the EF Core provider and which of the two migration sets (`Migrations/SqlServer`, `Migrations/Postgres`) applies, plus Hangfire's storage engine |
+| `ConnectionStrings` | `DefaultConnection` | SQL Server or Postgres connection string depending on `Database:Provider`. A `postgres://` URI (as Render supplies) is auto-converted to Npgsql format — see `ConnectionStringNormalizer`. `Redis` — optional; empty falls back to in-memory distributed cache |
 | `Jwt` | `Issuer`, `Audience`, `SigningKey`, `AccessTokenMinutes` | `SigningKey` must be a strong random value — see `.env.example` |
 | `Encryption` | `Key` | Base64 32-byte AES key for encrypting secret settings |
 | `Naicom` | `BaseUrl`, `TimeoutSeconds`, `RetryCount`, `CircuitBreakerFailureThreshold`, `CircuitBreakerBreakSeconds`, `BulkheadMaxParallelization`, `BulkheadMaxQueuedActions` | Resilience pipeline tuning — see `NaicomResiliencePolicies` |

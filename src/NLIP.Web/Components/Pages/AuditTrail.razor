@@ -1,0 +1,15 @@
+@page "/audit-trail"
+@attribute [Authorize(Policy = PermissionNames.AuditTrailView)]
+@using NLIP.Shared.Constants
+
+<PageTitle>Audit Trail — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">Audit Trail</h1>
+
+<div class="glass-panel p-3">
+    <p class="text-muted mb-0">
+        The AuditLogs table and write-side logging (see NLIP.Domain.Entities.Common.AuditLog and
+        the audit-writing MediatR behavior) are in place; a dedicated search/query API endpoint
+        and this screen's grid are tracked in docs/ROADMAP.md as the next slice of work.
+    </p>
+</div>

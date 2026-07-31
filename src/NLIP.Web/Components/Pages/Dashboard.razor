@@ -1,0 +1,108 @@
+@page "/"
+@attribute [Authorize(Policy = PermissionNames.DashboardView)]
+@using NLIP.Shared.Constants
+@inject NlipApiClient Api
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<PageTitle>Dashboard — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">Executive Dashboard</h1>
+
+@if (_stats is null)
+{
+    <p class="text-muted">Loading dashboard…</p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <StatCard Title="Total Policies" Value="@_stats.TotalPolicies.ToString("N0")" Icon="📑" />
+        <StatCard Title="Submitted Today" Value="@_stats.PoliciesSubmittedToday.ToString("N0")" Icon="📤" />
+        <StatCard Title="Retail Policies" Value="@_stats.RetailPolicies.ToString("N0")" Icon="👤" />
+        <StatCard Title="Group Policies" Value="@_stats.GroupPolicies.ToString("N0")" Icon="👥" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <StatCard Title="Successful" Value="@_stats.SuccessfulSubmissions.ToString("N0")" Icon="✅" Accent="success" />
+        <StatCard Title="Failed" Value="@_stats.FailedSubmissions.ToString("N0")" Icon="⛔" Accent="danger" />
+        <StatCard Title="Pending" Value="@_stats.PendingSubmissions.ToString("N0")" Icon="⏳" Accent="warning" />
+        <StatCard Title="Retry Queue" Value="@_stats.RetryQueueCount.ToString("N0")" Icon="🔁" Accent="warning" />
+        <StatCard Title="Processing" Value="@_stats.ProcessingQueueCount.ToString("N0")" Icon="⚙" />
+        <StatCard Title="Avg Response" Value="@($"{_stats.AverageResponseTimeMs:N0} ms")" Icon="⏱" />
+        <StatCard Title="Success Rate" Value="@($"{_stats.SuccessRatePercent:N1}%")" Icon="📈" Accent="success" />
+        <StatCard Title="Failure Rate" Value="@($"{_stats.FailureRatePercent:N1}%")" Icon="📉" Accent="danger" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="glass-panel p-3 h-100">
+                <h2 class="h6 text-muted">Daily Submission Volume (last 30 days)</h2>
+                <canvas id="dailyVolumeChart" height="110"></canvas>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass-panel p-3 h-100">
+                <h2 class="h6 text-muted">NAICOM API Status</h2>
+                <p class="mb-1">
+                    <span class="badge @(_stats.NaicomApiAvailable ? "bg-success" : "bg-danger")">
+                        @(_stats.NaicomApiAvailable ? "Available" : "Unavailable")
+                    </span>
+                </p>
+                <p class="text-muted small mb-0">Version: @(_stats.NaicomVersion ?? "unknown")</p>
+                <p class="text-muted small">Authenticated: @(_stats.NaicomAuthenticated ? "Yes" : "No")</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="glass-panel p-3 h-100">
+                <h2 class="h6 text-muted">Top Errors</h2>
+                <ul class="list-group list-group-flush">
+                    @foreach (var e in _stats.TopErrors)
+                    {
+                        <li class="list-group-item d-flex justify-content-between bg-transparent">
+                            <span class="text-truncate">@e.ErrorMessage</span>
+                            <span class="badge bg-secondary">@e.Count</span>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="glass-panel p-3 h-100">
+                <h2 class="h6 text-muted">Recent Activity</h2>
+                <ul class="list-group list-group-flush">
+                    @foreach (var a in _stats.RecentActivities)
+                    {
+                        <li class="list-group-item bg-transparent">
+                            <div>@a.Description</div>
+                            <small class="text-muted">@a.Category · @a.Timestamp.ToLocalTime().ToString("g")</small>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardStats? _stats;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stats = await Api.GetDashboardStatsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_stats is not null)
+        {
+            await Js.InvokeVoidAsync("nlip.renderLineChart", "dailyVolumeChart",
+                _stats.DailyVolume.Select(d => d.Label).ToArray(),
+                _stats.DailyVolume.Select(d => d.Count).ToArray());
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}

@@ -1,0 +1,46 @@
+@page "/settings"
+@attribute [Authorize(Policy = PermissionNames.SettingsView)]
+@using NLIP.Shared.Constants
+@inject NlipApiClient Api
+
+<PageTitle>Settings — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">System Settings</h1>
+
+<div class="glass-panel p-3">
+    @if (_settings is null)
+    {
+        <p class="text-muted">Loading…</p>
+    }
+    else
+    {
+        <table class="table nlip-table align-middle">
+            <thead><tr><th>Key</th><th>Description</th><th>Value</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var s in _settings)
+                {
+                    <tr>
+                        <td><code>@s.Key</code></td>
+                        <td class="text-muted small">@s.Description</td>
+                        <td style="min-width:280px">
+                            <input class="form-control" type="@(s.IsSecret ? "password" : "text")" @bind="s.Value" />
+                        </td>
+                        <td>
+                            <AuthorizeView Policy="@PermissionNames.SettingsManage" Context="manageCtx">
+                                <Authorized><button class="btn btn-sm btn-primary" @onclick="() => Save(s)">Save</button></Authorized>
+                            </AuthorizeView>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<SettingItem>? _settings;
+
+    protected override async Task OnInitializedAsync() => _settings = await Api.GetSettingsAsync();
+
+    private async Task Save(SettingItem setting) => await Api.UpdateSettingAsync(setting.Key, setting.Value ?? string.Empty, setting.IsSecret);
+}

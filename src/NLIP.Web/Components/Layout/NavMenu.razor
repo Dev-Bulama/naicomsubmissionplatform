@@ -1,0 +1,42 @@
+@using NLIP.Shared.Constants
+
+<nav class="nlip-nav">
+    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+        <span class="nav-icon">📊</span> <span class="nav-label">Dashboard</span>
+    </NavLink>
+    <AuthorizeView Policy="@PermissionNames.PoliciesView" Context="policyCtx">
+        <Authorized>
+            <NavLink class="nav-link" href="policies">
+                <span class="nav-icon">📄</span> <span class="nav-label">Policy Management</span>
+            </NavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="@PermissionNames.SyncMonitorView" Context="syncCtx">
+        <Authorized>
+            <NavLink class="nav-link" href="sync-monitor">
+                <span class="nav-icon">🔄</span> <span class="nav-label">Synchronization Monitor</span>
+            </NavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="@PermissionNames.AuditTrailView" Context="auditCtx">
+        <Authorized>
+            <NavLink class="nav-link" href="audit-trail">
+                <span class="nav-icon">🕵</span> <span class="nav-label">Audit Trail</span>
+            </NavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="@PermissionNames.ReportsView" Context="reportsCtx">
+        <Authorized>
+            <NavLink class="nav-link" href="reports">
+                <span class="nav-icon">📈</span> <span class="nav-label">Reports</span>
+            </NavLink>
+        </Authorized>
+    </AuthorizeView>
+    <AuthorizeView Policy="@PermissionNames.SettingsView" Context="settingsCtx">
+        <Authorized>
+            <NavLink class="nav-link" href="settings">
+                <span class="nav-icon">⚙</span> <span class="nav-label">Settings</span>
+            </NavLink>
+        </Authorized>
+    </AuthorizeView>
+</nav>

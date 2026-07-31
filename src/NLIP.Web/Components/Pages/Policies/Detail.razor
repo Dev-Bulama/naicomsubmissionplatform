@@ -1,0 +1,108 @@
+@page "/policies/{PolicyId:guid}"
+@attribute [Authorize(Policy = PermissionNames.PoliciesView)]
+@using NLIP.Shared.Constants
+@inject NlipApiClient Api
+
+<PageTitle>Policy Detail — NLIP</PageTitle>
+
+@if (_policy is null)
+{
+    <p class="text-muted">Loading…</p>
+}
+else
+{
+    <h1 class="h3 mb-1">@_policy.PolicyNumber</h1>
+    <p class="text-muted">@_policy.BusinessType · @_policy.CustomerOrEmployerName</p>
+
+    <div class="row g-3 mb-3">
+        <StatCard Title="Status" Value="@_policy.Status" Icon="📌" />
+        <StatCard Title="Submission" Value="@_policy.CurrentSubmissionStatus" Icon="🔄" />
+        <StatCard Title="NAICOM ID" Value="@(_policy.NaicomPolicyId ?? "—")" Icon="🆔" />
+        <StatCard Title="Retry Count" Value="@_policy.RetryCount.ToString()" Icon="🔁" />
+    </div>
+
+    <ul class="nav nav-tabs mb-3">
+        <li class="nav-item"><button class="nav-link @(_tab == "overview" ? "active" : "")" @onclick='() => _tab = "overview"'>Overview</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == "members" ? "active" : "")" @onclick='() => _tab = "members"'>Beneficiaries / Members</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == "history" ? "active" : "")" @onclick='() => _tab = "history"'>History</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == "submissions" ? "active" : "")" @onclick='() => _tab = "submissions"'>Submission Timeline</button></li>
+        <li class="nav-item"><button class="nav-link @(_tab == "transactions" ? "active" : "")" @onclick='() => _tab = "transactions"'>NAICOM Transactions</button></li>
+    </ul>
+
+    <div class="glass-panel p-3">
+        @if (_tab == "overview")
+        {
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Core Policy ID</dt><dd class="col-sm-9">@_policy.CorePolicyId</dd>
+                <dt class="col-sm-3">Branch</dt><dd class="col-sm-9">@_policy.BranchName</dd>
+                <dt class="col-sm-3">Agent</dt><dd class="col-sm-9">@_policy.AgentName</dd>
+                <dt class="col-sm-3">Sum Assured</dt><dd class="col-sm-9">@_policy.SumAssured.ToString("N2")</dd>
+                <dt class="col-sm-3">Premium</dt><dd class="col-sm-9">@_policy.PremiumAmount.ToString("N2") (@_policy.PremiumFrequency)</dd>
+                <dt class="col-sm-3">Coverage</dt><dd class="col-sm-9">@_policy.CoverageStartDate.ToShortDateString() — @_policy.CoverageEndDate.ToShortDateString()</dd>
+            </dl>
+        }
+        else if (_tab == "members")
+        {
+            @if (_policy.Beneficiaries.Any())
+            {
+                <table class="table nlip-table"><thead><tr><th>Name</th><th>Relationship</th><th>Share %</th></tr></thead>
+                <tbody>@foreach (var b in _policy.Beneficiaries){<tr><td>@b.FullName</td><td>@b.Relationship</td><td>@b.SharePercentage</td></tr>}</tbody></table>
+            }
+            @if (_policy.GroupMembers.Any())
+            {
+                <table class="table nlip-table"><thead><tr><th>Employee ID</th><th>Name</th><th>Sum Assured</th><th>Active</th></tr></thead>
+                <tbody>@foreach (var m in _policy.GroupMembers){<tr><td>@m.EmployeeId</td><td>@m.FullName</td><td>@m.SumAssured.ToString("N2")</td><td>@m.IsActive</td></tr>}</tbody></table>
+            }
+        }
+        else if (_tab == "history")
+        {
+            <table class="table nlip-table"><thead><tr><th>Previous</th><th>New</th><th>Notes</th><th>When</th></tr></thead>
+            <tbody>@foreach (var h in _policy.History){<tr><td>@h.PreviousStatus</td><td>@h.NewStatus</td><td>@h.Notes</td><td>@h.ChangedAt.ToLocalTime().ToString("g")</td></tr>}</tbody></table>
+        }
+        else if (_tab == "submissions")
+        {
+            <table class="table nlip-table">
+                <thead><tr><th>Action</th><th>Status</th><th>Retries</th><th>Next Attempt</th><th>Last Error</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var s in _policy.SubmissionTimeline)
+                    {
+                        <tr>
+                            <td>@s.Action</td>
+                            <td><span class="badge status-@s.Status.ToLower()">@s.Status</span></td>
+                            <td>@s.RetryCount / @s.MaxRetries</td>
+                            <td>@(s.NextAttemptAt?.ToLocalTime().ToString("g") ?? "—")</td>
+                            <td class="text-truncate" style="max-width:250px">@s.LastError</td>
+                            <td>
+                                @if (s.Status is "Failed" or "DeadLetter" or "Retrying")
+                                {
+                                    <button class="btn btn-sm btn-outline-warning" @onclick="() => Retry(s.Id)">Retry</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else if (_tab == "transactions")
+        {
+            <table class="table nlip-table">
+                <thead><tr><th>Action</th><th>Success</th><th>HTTP</th><th>Duration</th><th>When</th></tr></thead>
+                <tbody>@foreach (var t in _policy.Transactions){<tr><td>@t.Action</td><td>@t.IsSuccessful</td><td>@t.HttpStatusCode</td><td>@t.DurationMs ms</td><td>@t.AttemptedAt.ToLocalTime().ToString("g")</td></tr>}</tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid PolicyId { get; set; }
+    private PolicyDetail? _policy;
+    private string _tab = "overview";
+
+    protected override async Task OnParametersSetAsync() => _policy = await Api.GetPolicyAsync(PolicyId);
+
+    private async Task Retry(Guid submissionId)
+    {
+        await Api.RetrySubmissionAsync(submissionId);
+        _policy = await Api.GetPolicyAsync(PolicyId);
+    }
+}

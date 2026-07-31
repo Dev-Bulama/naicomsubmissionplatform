@@ -1,0 +1,65 @@
+@inherits LayoutComponentBase
+@inject AuthSessionService Session
+@inject NavigationManager Nav
+
+<CascadingAuthenticationState>
+    <AuthorizeView>
+        <Authorized>
+            <div class="nlip-shell @(_sidebarCollapsed ? "sidebar-collapsed" : "")">
+                <aside class="nlip-sidebar glass-panel">
+                    <div class="brand px-3 py-3 d-flex align-items-center gap-2">
+                        <span class="brand-mark">N</span>
+                        <span class="brand-text">NLIP</span>
+                    </div>
+                    <NavMenu />
+                </aside>
+
+                <div class="nlip-main">
+                    <header class="nlip-topbar glass-panel d-flex align-items-center justify-content-between px-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleSidebar" title="Toggle sidebar">
+                                <i class="bi">☰</i>
+                            </button>
+                            <nav class="breadcrumb-nlip text-muted small">@Nav.ToBaseRelativePath(Nav.Uri)</nav>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleTheme" title="Toggle dark/light mode">🌓</button>
+                            <span class="text-muted small">@context.User.Identity?.Name</span>
+                            <button class="btn btn-sm btn-danger" @onclick="Logout">Log out</button>
+                        </div>
+                    </header>
+
+                    <main class="nlip-content p-4">
+                        @Body
+                    </main>
+                </div>
+            </div>
+        </Authorized>
+        <NotAuthorized>
+            <div class="d-flex align-items-center justify-content-center vh-100 auth-backdrop">
+                @Body
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</CascadingAuthenticationState>
+
+@code {
+    private bool _sidebarCollapsed;
+
+    private void ToggleSidebar() => _sidebarCollapsed = !_sidebarCollapsed;
+
+    private async Task Logout()
+    {
+        await Session.ClearAsync();
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+
+    private async Task ToggleTheme()
+    {
+        await JsToggleTheme();
+    }
+
+    [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
+
+    private async Task JsToggleTheme() => await JsRuntime.InvokeVoidAsync("nlip.toggleTheme");
+}

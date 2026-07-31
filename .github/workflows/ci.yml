@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, 'claude/**' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore
+        run: dotnet restore NLIP.sln
+
+      - name: Build
+        run: dotnet build NLIP.sln --no-restore -c Release
+
+      - name: Unit tests
+        run: dotnet test tests/NLIP.UnitTests/NLIP.UnitTests.csproj --no-build -c Release --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Integration tests
+        run: dotnet test tests/NLIP.IntegrationTests/NLIP.IntegrationTests.csproj --no-build -c Release --logger "trx;LogFileName=integration-tests.trx"
+
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/*.trx'

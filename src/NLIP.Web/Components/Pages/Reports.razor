@@ -1,0 +1,17 @@
+@page "/reports"
+@attribute [Authorize(Policy = PermissionNames.ReportsView)]
+@using NLIP.Shared.Constants
+
+<PageTitle>Reports — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">Reports</h1>
+
+<div class="glass-panel p-3">
+    <p class="text-muted mb-2">
+        The data this screen needs (submission stats, success/failure rates, retry analysis) is
+        already queryable — see GetDashboardStatsQuery and GetSyncMonitorQuery — but the
+        Excel/PDF/CSV export endpoints and the daily/weekly/monthly/quarterly/yearly report
+        builder UI are not yet wired up.
+    </p>
+    <p class="text-muted mb-0">Tracked in docs/ROADMAP.md.</p>
+</div>

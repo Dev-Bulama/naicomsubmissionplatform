@@ -1,0 +1,70 @@
+@page "/sync-monitor"
+@attribute [Authorize(Policy = PermissionNames.SyncMonitorView)]
+@using NLIP.Shared.Constants
+@inject NlipApiClient Api
+
+<PageTitle>Synchronization Monitor — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">Synchronization Monitor</h1>
+
+<div class="glass-panel p-3 mb-3 d-flex gap-2 align-items-center">
+    <label class="me-2">Status</label>
+    <select class="form-select w-auto" @bind="_status" @bind:after="Load">
+        <option value="">All</option>
+        <option value="Queued">Queued</option>
+        <option value="Processing">Processing</option>
+        <option value="Completed">Completed</option>
+        <option value="Failed">Failed</option>
+        <option value="Retrying">Retrying</option>
+        <option value="DeadLetter">DeadLetter</option>
+        <option value="Cancelled">Cancelled</option>
+    </select>
+</div>
+
+<div class="glass-panel p-3">
+    @if (_result is null)
+    {
+        <p class="text-muted">Loading…</p>
+    }
+    else
+    {
+        <table class="table nlip-table">
+            <thead><tr><th>Policy #</th><th>Type</th><th>Action</th><th>Status</th><th>Retries</th><th>Next Attempt</th><th>Last Error</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var s in _result.Items)
+                {
+                    <tr>
+                        <td><a href="policies/@s.PolicyId">@s.PolicyNumber</a></td>
+                        <td>@s.BusinessType</td>
+                        <td>@s.Action</td>
+                        <td><span class="badge status-@s.Status.ToLower()">@s.Status</span></td>
+                        <td>@s.RetryCount / @s.MaxRetries</td>
+                        <td>@(s.NextAttemptAt?.ToLocalTime().ToString("g") ?? "—")</td>
+                        <td class="text-truncate" style="max-width:280px">@s.LastError</td>
+                        <td>
+                            @if (s.Status is "Failed" or "DeadLetter" or "Retrying")
+                            {
+                                <button class="btn btn-sm btn-outline-warning" @onclick="() => Retry(s.SubmissionId)">Retry</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private string _status = string.Empty;
+    private PaginatedList<SyncMonitorItem>? _result;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load() => _result = await Api.GetSyncMonitorAsync(string.IsNullOrEmpty(_status) ? null : _status);
+
+    private async Task Retry(Guid submissionId)
+    {
+        await Api.RetrySubmissionAsync(submissionId);
+        await Load();
+    }
+}

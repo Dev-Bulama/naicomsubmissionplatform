@@ -1,0 +1,33 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.dll
+*.pdb
+
+## Logs
+logs/
+*.log
+
+## Environment / secrets
+.env
+.env.*
+appsettings.*.local.json
+**/appsettings.Development.json.local
+*.pfx
+*.key
+
+## Database
+*.mdf
+*.ldf
+
+## Docker
+docker-data/
+
+## Tooling
+.idea/
+.vscode/
+*.DotSettings.user
+node_modules/

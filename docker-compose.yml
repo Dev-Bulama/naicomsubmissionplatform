@@ -1,0 +1,90 @@
+name: nlip
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: nlip-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      MSSQL_PID: Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - nlip-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nlip-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - nlip-redis-data:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.api
+    container_name: nlip-api
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=NlipDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true"
+      ConnectionStrings__Redis: "redis:6379"
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?JWT_SIGNING_KEY is required}
+      Jwt__Issuer: NLIP
+      Jwt__Audience: NLIP.Clients
+      Encryption__Key: ${ENCRYPTION_KEY_BASE64:?ENCRYPTION_KEY_BASE64 is required}
+      Naicom__BaseUrl: ${NAICOM_BASE_URL:-https://portal.naicom.gov.ng/}
+      Cors__AllowedOrigins__0: "http://web:8081"
+    ports:
+      - "8080:8080"
+    volumes:
+      - nlip-api-logs:/app/logs
+
+  worker:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.worker
+    container_name: nlip-worker
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ConnectionStrings__DefaultConnection: "Server=sqlserver;Database=NlipDb;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True;MultipleActiveResultSets=true"
+      ConnectionStrings__Redis: "redis:6379"
+      Encryption__Key: ${ENCRYPTION_KEY_BASE64:?ENCRYPTION_KEY_BASE64 is required}
+      Naicom__BaseUrl: ${NAICOM_BASE_URL:-https://portal.naicom.gov.ng/}
+    volumes:
+      - nlip-worker-logs:/app/logs
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.web
+    container_name: nlip-web
+    depends_on:
+      - api
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      Api__BaseUrl: "http://api:8080/"
+    ports:
+      - "8081:8081"
+
+volumes:
+  nlip-sqlserver-data:
+  nlip-redis-data:
+  nlip-api-logs:
+  nlip-worker-logs:

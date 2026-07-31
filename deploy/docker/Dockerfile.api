@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+COPY NLIP.sln .
+COPY src/NLIP.Shared/NLIP.Shared.csproj src/NLIP.Shared/
+COPY src/NLIP.Domain/NLIP.Domain.csproj src/NLIP.Domain/
+COPY src/NLIP.Application/NLIP.Application.csproj src/NLIP.Application/
+COPY src/NLIP.Integration/NLIP.Integration.csproj src/NLIP.Integration/
+COPY src/NLIP.Persistence/NLIP.Persistence.csproj src/NLIP.Persistence/
+COPY src/NLIP.Infrastructure/NLIP.Infrastructure.csproj src/NLIP.Infrastructure/
+COPY src/NLIP.Worker/NLIP.Worker.csproj src/NLIP.Worker/
+COPY src/NLIP.API/NLIP.API.csproj src/NLIP.API/
+COPY src/NLIP.Web/NLIP.Web.csproj src/NLIP.Web/
+COPY tests/NLIP.UnitTests/NLIP.UnitTests.csproj tests/NLIP.UnitTests/
+COPY tests/NLIP.IntegrationTests/NLIP.IntegrationTests.csproj tests/NLIP.IntegrationTests/
+RUN dotnet restore src/NLIP.API/NLIP.API.csproj
+
+COPY . .
+RUN dotnet publish src/NLIP.API/NLIP.API.csproj -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+WORKDIR /app
+RUN useradd --uid 5000 nlip
+USER nlip
+COPY --from=build /app/publish .
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "NLIP.API.dll"]

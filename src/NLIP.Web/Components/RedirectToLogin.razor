@@ -1,0 +1,26 @@
+@inject NavigationManager Nav
+
+@if (_forbidden)
+{
+    <Layout.MainLayout>
+        <div class="alert alert-warning m-4">You do not have permission to view this page.</div>
+    </Layout.MainLayout>
+}
+
+@code {
+    [CascadingParameter] private Task<Microsoft.AspNetCore.Components.Authorization.AuthenticationState>? AuthStateTask { get; set; }
+    private bool _forbidden;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = AuthStateTask is not null ? await AuthStateTask : null;
+        if (authState?.User.Identity?.IsAuthenticated == true)
+        {
+            _forbidden = true;
+        }
+        else
+        {
+            Nav.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(Nav.ToBaseRelativePath(Nav.Uri))}", forceLoad: true);
+        }
+    }
+}

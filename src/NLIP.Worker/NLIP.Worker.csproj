@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>NLIP.Worker</RootNamespace>
+    <UserSecretsId>nlip-worker-secrets</UserSecretsId>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.Core" Version="1.8.15" />
+    <PackageReference Include="Hangfire.SqlServer" Version="1.8.15" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NLIP.Application\NLIP.Application.csproj" />
+    <ProjectReference Include="..\NLIP.Infrastructure\NLIP.Infrastructure.csproj" />
+    <ProjectReference Include="..\NLIP.Integration\NLIP.Integration.csproj" />
+    <ProjectReference Include="..\NLIP.Persistence\NLIP.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>

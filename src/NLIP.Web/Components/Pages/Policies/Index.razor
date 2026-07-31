@@ -1,0 +1,102 @@
+@page "/policies"
+@attribute [Authorize(Policy = PermissionNames.PoliciesView)]
+@using NLIP.Shared.Constants
+@inject NlipApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Policy Management — NLIP</PageTitle>
+
+<h1 class="h3 mb-4">Policy Management</h1>
+
+<div class="glass-panel p-3 mb-3">
+    <div class="row g-2">
+        <div class="col-md-3">
+            <input class="form-control" placeholder="Policy Number" @bind="_policyNumber" @bind:event="oninput" />
+        </div>
+        <div class="col-md-3">
+            <input class="form-control" placeholder="Customer / Employer Name" @bind="_name" @bind:event="oninput" />
+        </div>
+        <div class="col-md-2">
+            <input class="form-control" placeholder="NAICOM ID" @bind="_naicomId" @bind:event="oninput" />
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" @bind="_businessType">
+                <option value="">All Types</option>
+                <option value="IndividualLife">Individual Life</option>
+                <option value="GroupLife">Group Life</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-primary w-100" @onclick="Search">Search</button>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel p-3">
+    @if (_result is null)
+    {
+        <p class="text-muted">Loading…</p>
+    }
+    else if (_result.Items.Count == 0)
+    {
+        <p class="text-muted">No policies match your search.</p>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle nlip-table">
+                <thead>
+                    <tr>
+                        <th>Policy #</th>
+                        <th>Type</th>
+                        <th>Customer / Employer</th>
+                        <th>NAICOM ID</th>
+                        <th>Status</th>
+                        <th>Submission</th>
+                        <th>Sum Assured</th>
+                        <th>Retries</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _result.Items)
+                    {
+                        <tr>
+                            <td>@p.PolicyNumber</td>
+                            <td>@p.BusinessType</td>
+                            <td>@p.CustomerOrEmployerName</td>
+                            <td>@(p.NaicomPolicyId ?? "—")</td>
+                            <td><span class="badge status-@p.Status.ToLower()">@p.Status</span></td>
+                            <td><span class="badge status-@p.CurrentSubmissionStatus.ToLower()">@p.CurrentSubmissionStatus</span></td>
+                            <td>@p.SumAssured.ToString("N2")</td>
+                            <td>@p.RetryCount</td>
+                            <td><a class="btn btn-sm btn-outline-primary" href="policies/@p.Id">View</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="text-muted small">Page @_result.PageNumber of @_result.TotalPages — @_result.TotalCount total</div>
+    }
+</div>
+
+@code {
+    private string _policyNumber = string.Empty;
+    private string _name = string.Empty;
+    private string _naicomId = string.Empty;
+    private string _businessType = string.Empty;
+    private PaginatedList<PolicySummary>? _result;
+
+    protected override async Task OnInitializedAsync() => await Search();
+
+    private async Task Search()
+    {
+        var qs = new List<string> { "pageNumber=1", "pageSize=25" };
+        if (!string.IsNullOrWhiteSpace(_policyNumber)) qs.Add($"policyNumber={Uri.EscapeDataString(_policyNumber)}");
+        if (!string.IsNullOrWhiteSpace(_name)) qs.Add($"customerOrEmployerName={Uri.EscapeDataString(_name)}");
+        if (!string.IsNullOrWhiteSpace(_naicomId)) qs.Add($"naicomPolicyId={Uri.EscapeDataString(_naicomId)}");
+        if (!string.IsNullOrWhiteSpace(_businessType)) qs.Add($"businessType={_businessType}");
+
+        _result = await Api.SearchPoliciesAsync(string.Join("&", qs));
+    }
+}
